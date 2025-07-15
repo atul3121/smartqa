@@ -1,3 +1,7 @@
+const Room = require('../models/Rooms');
+const Question = require('../models/Questions');
+
+
 const roomController = {
     createRoom: async (request, response) => {
         try {
@@ -18,7 +22,7 @@ const roomController = {
         }
     },
 
-    getRoomCode: async (request, response) => {
+    getByRoomCode: async (request, response) => {
         try {
             const code = request.params.code;
 

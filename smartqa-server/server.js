@@ -22,10 +22,11 @@ app.use(cors(corsConfig));
 app.use('/rooms', roomRoutes);
 
 // start the server
+
 const PORT = process.env.PORT;
 app.listen(PORT, (error) =>{
     if (error) {
-        console.error(`Server not started due to: `,error);
+        console.error('Server not started due to: ',error);
     } else {
         console.log(`Server is running on port ${PORT}`)
     }
