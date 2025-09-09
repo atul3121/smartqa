@@ -1,76 +1,97 @@
 const Room = require('../models/Rooms');
 const Question = require('../models/Questions');
-
+const { callGemini } = require('../services/geminiService'); 
 
 const roomController = {
-    createRoom: async (request, response) => {
-        try {
-            const { createdBy } = request.body;
+  // Create a new room with a unique code
+  createRoom: async (request, response) => {
+    try {
+      const { createdBy } = request.body;
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const room = await Room.create({
+        roomCode: code,
+        createdBy,
+      });
 
-            const room = await Room.create({
-                roomCode: code,
-                createdBy: createdBy,
-            });
+      response.json(room);
+    } catch (error) {
+      console.error(error);
+      response.status(500).json({ message: 'Internal Server Error' });
+    }
+  },
 
-            response.json(room);
+  // Retrieve a room using its code
+  getByRoomCode: async (request, response) => {
+    try {
+      const code = request.params.code;
+      const room = await Room.findOne({ roomCode: code });
 
-        }catch (error) {
-            console.error(error);
-            response.status(500).json({ message: 'Internal Server Error' });
-        }
-    },
+      if (!room) {
+        return response.status(404).json({ message: 'Room not found' });
+      }
 
-    getByRoomCode: async (request, response) => {
-        try {
-            const code = request.params.code;
+      response.json(room);
+    } catch (error) {
+      console.error(error);
+      response.status(500).json({ message: 'Internal Server Error' });
+    }
+  },
 
-            const room = await Room.findOne({ roomCode: code });
-            if (!room) {
-                return response.status(404).json({ message: 'Room not found' });
-            }
+  // Create a new question and emit it via socket
+  createQuestion: async (request, response) => {
+    try {
+      const { content, createdBy } = request.body;
+      const { code } = request.params;
 
-            response.json(room);
-        }catch (error) {
-            console.error(error);
-        }
-    },
+      const question = await Question.create({
+        roomCode: code,
+        content,
+        createdBy,
+      });
 
+      const io = request.app.get('io');
+      io.to(code).emit('new-question', question);
 
-    // POST /rooms/:code/questions
-    createQuestion: async (request, response) => {
-        try {
-            const { content, createdBy } = request.body;
-            const { code } = request.params;
+      response.json(question);
+    } catch (error) {
+      console.error(error);
+      response.status(500).json({ message: 'Internal Server Error' });
+    }
+  },
 
-            const questions = await Question.create({
-                roomCode: code,
-                content: content,
-                createdBy: createdBy,
-            });
+  // Get all questions for a specific room
+  getQuestions: async (request, response) => {
+    try {
+      const code = request.params.code;
+      const questions = await Question.find({ roomCode: code }).sort({ createdAt: -1 });
 
-            response.json(questions);
-        }catch (error) {
-            console.error(error);
-            response.status(500).json({ message: 'Internal Server Error' });
-        }
-    },
+      response.json(questions);
+    } catch (error) {
+      console.error(error);
+      response.status(500).json({ message: 'Internal Server Error' });
+    }
+  },
 
+  // ✅ Generate summarized top questions using Gemini API
+  generateTopQuestions: async (request, response) => {
+    try {
+      const code = request.params.code;
 
-    // GET /rooms/:code/questions
-    getQuestions: async (request, response) => {
-        try {
-            const code = request.params.code;
+      const questions = await Question.find({ roomCode: code });
 
-            const questions = await Question.find({ roomCode: code }).sort({ createdAt: -1 });
+      if (!questions || questions.length === 0) {
+        return response.status(404).json({ message: 'No questions found in this room' });
+      }
 
-            response.json(questions);
-        }catch (error) {
-            console.error(error);
-            response.status(500).json({ message: 'Internal Server Error' });
-        }
-    },
+      const summarized = await callGemini(questions);
+
+      response.json({ topQuestions: summarized });
+    } catch (error) {
+      console.error(error);
+      response.status(500).json({ message: 'Failed to generate top questions' });
+    }
+  }
 };
 
 module.exports = roomController;
